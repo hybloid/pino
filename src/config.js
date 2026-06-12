@@ -2,6 +2,18 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const UPSTREAM_HOST = "api.anthropic.com";
+
+export function parseUpstream() {
+  const raw = process.env.UPSTREAM_URL;
+  if (!raw) return { protocol: "https:", hostname: UPSTREAM_HOST, port: 443, basePath: "" };
+  const u = new URL(raw);
+  return {
+    protocol: u.protocol,
+    hostname: u.hostname,
+    port: u.port ? Number(u.port) : u.protocol === "https:" ? 443 : 80,
+    basePath: u.pathname.replace(/\/$/, ""),
+  };
+}
 export const BETA_FLAG = "extended-cache-ttl-2025-04-11";
 
 // Client-sent breakpoints on system blocks smaller than this waste a slot.

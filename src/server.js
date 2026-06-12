@@ -2,7 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
 
-import { loadConfig, loadTransform, UPSTREAM_HOST } from "./config.js";
+import { loadConfig, loadTransform, UPSTREAM_HOST, parseUpstream } from "./config.js";
 import {
   ensureBetaHeader,
   injectBreakpointIfAbsent,
@@ -35,6 +35,8 @@ function isMessagesPath(pathname) {
 
 export function createServer({ config, transformFn }) {
   const { AUTO_CACHE, LOG_BODIES, LOG_DIR, TAIL_TTL, MODEL_OVERRIDE } = config;
+  const upstream = parseUpstream();
+  const requestFn = upstream.protocol === "https:" ? https.request : http.request;
 
   return http.createServer((req, res) => {
     const chunks = [];
@@ -96,7 +98,7 @@ export function createServer({ config, transformFn }) {
       }
 
       const headers = { ...req.headers };
-      headers.host = UPSTREAM_HOST;
+      headers.host = upstream.hostname;
       headers["content-length"] = String(outBody.length);
       const betaStatus = AUTO_CACHE && parsed ? ensureBetaHeader(headers) : "skipped";
       notes.push(`beta=${betaStatus}`);
@@ -129,11 +131,11 @@ export function createServer({ config, transformFn }) {
         );
       }
 
-      const upReq = https.request(
+      const upReq = requestFn(
         {
-          hostname: UPSTREAM_HOST,
-          port: 443,
-          path: req.url,
+          hostname: upstream.hostname,
+          port: upstream.port,
+          path: upstream.basePath + req.url,
           method: req.method,
           headers,
         },
