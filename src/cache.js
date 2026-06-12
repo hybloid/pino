@@ -1,9 +1,9 @@
 import { BETA_FLAG, BREAKPOINT_CEILING, MIN_SYSTEM_CACHE_CHARS } from "./config.js";
 
-export function rewriteCacheControl(node, counter, skip) {
+export function rewriteCacheControl(node, counter, skip, headTtl = "1h") {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) rewriteCacheControl(item, counter, skip);
+    for (const item of node) rewriteCacheControl(item, counter, skip, headTtl);
     return;
   }
   if (node.cache_control && node.cache_control.type === "ephemeral") {
@@ -11,8 +11,8 @@ export function rewriteCacheControl(node, counter, skip) {
       counter.skipped += 1;
     } else {
       const before = node.cache_control.ttl;
-      if (before !== "1h") {
-        node.cache_control.ttl = "1h";
+      if (before !== headTtl) {
+        node.cache_control.ttl = headTtl;
         counter.rewritten += 1;
       } else {
         counter.alreadySet += 1;
@@ -21,7 +21,7 @@ export function rewriteCacheControl(node, counter, skip) {
   }
   for (const key of Object.keys(node)) {
     const v = node[key];
-    if (v && typeof v === "object") rewriteCacheControl(v, counter, skip);
+    if (v && typeof v === "object") rewriteCacheControl(v, counter, skip, headTtl);
   }
 }
 
@@ -122,7 +122,7 @@ function findLastCacheableMessageBlock(body) {
 }
 
 export function injectBreakpointIfAbsent(body, opts = {}) {
-  const { tailTtl = "5m" } = opts;
+  const { tailTtl = "5m", headTtl = "1h" } = opts;
   const tags = [];
   const tailBlocks = new Set();
 
@@ -132,7 +132,7 @@ export function injectBreakpointIfAbsent(body, opts = {}) {
   if (Array.isArray(body.tools) && body.tools.length > 0 && !hasBreakpoint(body.tools)) {
     const last = body.tools[body.tools.length - 1];
     if (last && typeof last === "object") {
-      last.cache_control = { type: "ephemeral", ttl: "1h" };
+      last.cache_control = { type: "ephemeral", ttl: headTtl };
       tags.push("tools");
     }
   }
@@ -140,12 +140,12 @@ export function injectBreakpointIfAbsent(body, opts = {}) {
   if (Array.isArray(body.system) && body.system.length > 0 && !hasBreakpoint(body.system)) {
     const last = body.system[body.system.length - 1];
     if (last && typeof last === "object") {
-      last.cache_control = { type: "ephemeral", ttl: "1h" };
+      last.cache_control = { type: "ephemeral", ttl: headTtl };
       tags.push("system");
     }
   } else if (typeof body.system === "string" && body.system.length > 0) {
     body.system = [
-      { type: "text", text: body.system, cache_control: { type: "ephemeral", ttl: "1h" } },
+      { type: "text", text: body.system, cache_control: { type: "ephemeral", ttl: headTtl } },
     ];
     tags.push("system-string");
   }
@@ -160,7 +160,7 @@ export function injectBreakpointIfAbsent(body, opts = {}) {
   ) {
     const first = findLastCacheableBlockInMessage(body.messages[0]);
     if (first && !first.cache_control) {
-      first.cache_control = { type: "ephemeral", ttl: "1h" };
+      first.cache_control = { type: "ephemeral", ttl: headTtl };
       tags.push("msg0");
     }
   }

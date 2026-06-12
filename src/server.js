@@ -82,14 +82,23 @@ export function createServer({ config, transformFn }) {
       }
 
       if (parsed && AUTO_CACHE) {
+        // Subagent conversations are short-lived with back-to-back turns: the
+        // 2.0x write premium of 1h TTL never pays back there (a 5m entry is
+        // refreshed on every read while the agent is actively working).
+        // Claude Code marks subagent requests with x-claude-code-agent-id —
+        // force the cheaper 5m TTL on every slot for those. Main sessions
+        // keep the 1h head and the configurable TAIL_TTL tail.
+        const isSubagent = Boolean(req.headers["x-claude-code-agent-id"]);
+        const headTtl = isSubagent ? "5m" : "1h";
+        const tailTtl = isSubagent ? "5m" : TAIL_TTL;
         const strippedMid = stripIntermediateMessageBreakpoints(parsed);
-        const { tag, tailBlocks } = injectBreakpointIfAbsent(parsed, { tailTtl: TAIL_TTL });
-        const clientTail = normalizeTailBreakpoints(parsed, TAIL_TTL);
+        const { tag, tailBlocks } = injectBreakpointIfAbsent(parsed, { tailTtl, headTtl });
+        const clientTail = normalizeTailBreakpoints(parsed, tailTtl);
         const skip = new Set([...tailBlocks, ...clientTail]);
         const counter = { rewritten: 0, alreadySet: 0, skipped: 0 };
-        rewriteCacheControl(parsed, counter, skip);
+        rewriteCacheControl(parsed, counter, skip, headTtl);
         notes.push(
-          `cache=rewrote:${counter.rewritten},already:${counter.alreadySet},skipped:${counter.skipped},inject:${tag},mid-stripped:${strippedMid},tail-ttl:${TAIL_TTL}`,
+          `cache=rewrote:${counter.rewritten},already:${counter.alreadySet},skipped:${counter.skipped},inject:${tag},mid-stripped:${strippedMid},ttl:${headTtl}/${tailTtl}${isSubagent ? ",sub" : ""}`,
         );
       }
 
