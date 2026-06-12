@@ -16,6 +16,14 @@ ENTRY_PORT=8787
 SECONDARY_PORT=8788
 HEADROOM_BIN="/Users/d.kopfmann/.venv-headroom/bin/headroom"
 
+# Rolling-tail TTL for MAIN sessions (subagents are pinned to 5m by pino
+# itself via x-claude-code-agent-id detection). 1h pays off for the
+# orchestrator + subagent-fanout pattern: while subagents run 6-30 min the
+# orchestrator sits idle, a 5m tail expires on every fan-out and the resume
+# re-writes 100-200K+ history tokens at 1.25x. The 2.0x premium applies only
+# to small per-turn tail deltas (~$3/day) vs ~$25/day lost to idle expiry.
+TAIL_TTL="${TAIL_TTL:-1h}"
+
 MODE_FILE="$HOME/.claude/proxy-mode"
 MODE="${PROXY_MODE:-$(cat "$MODE_FILE" 2>/dev/null || echo "pino")}"
 
@@ -54,6 +62,7 @@ start_pino() {
 
   PORT="$port" AUTO_CACHE=1 \
     UPSTREAM_URL="$upstream" \
+    TAIL_TTL="$TAIL_TTL" \
     TRANSFORM_FILE="$PINO_DIR/src/transforms/default.js" \
     node "$PINO_DIR/bin/pino-proxy.js" >> "/tmp/pino-${port}.log" 2>&1 &
 
