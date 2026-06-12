@@ -25,6 +25,9 @@ step() { echo -e "\n${BLUE}▸${NC} $*"; }
 # ── аргументы ──────────────────────────────────────────────────────────────
 PINO_DIR="${PINO_DIR:-$HOME/JetBrains/pino}"
 VENV_DIR="$HOME/.venv-headroom"
+# Install headroom from our fork (carries the Claude-Code session-id cache fix).
+# Overridable: HEADROOM_PKG='headroom-ai[all]' for upstream PyPI.
+HEADROOM_PKG="${HEADROOM_PKG:-headroom-ai[all] @ git+https://github.com/hybloid/headroom@release/v0.25.0-session-id-fix}"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 MODE_FILE="$HOME/.claude/proxy-mode"
 
@@ -161,9 +164,9 @@ if [[ -x "$VENV_DIR/bin/headroom" ]]; then
   HEADROOM_VER=$("$VENV_DIR/bin/headroom" --version 2>/dev/null | awk '{print $NF}')
   ok "headroom already installed ($HEADROOM_VER) — skipping"
 else
-  echo "  Installing headroom-ai[all] into $VENV_DIR (may take a few minutes)..."
+  echo "  Installing $HEADROOM_PKG into $VENV_DIR (may take a few minutes; builds Rust core)..."
   "$PYTHON" -m venv "$VENV_DIR"
-  "$VENV_DIR/bin/pip" install "headroom-ai[all]" -q
+  "$VENV_DIR/bin/pip" install "$HEADROOM_PKG" -q
   HEADROOM_VER=$("$VENV_DIR/bin/headroom" --version 2>/dev/null | awk '{print $NF}')
   ok "headroom $HEADROOM_VER installed"
 fi
@@ -245,7 +248,7 @@ start_headroom() {
 
   if [[ ! -x "\$HEADROOM_BIN" ]]; then
     echo "headroom not found at \$HEADROOM_BIN" >&2
-    echo "Run the installer again or: \$PYTHON -m venv $VENV_DIR && $VENV_DIR/bin/pip install 'headroom-ai[all]'" >&2
+    echo "Run the installer again or: \$PYTHON -m venv $VENV_DIR && $VENV_DIR/bin/pip install 'headroom-ai[all] @ git+https://github.com/hybloid/headroom@release/v0.25.0-session-id-fix'" >&2
     exit 1
   fi
 
