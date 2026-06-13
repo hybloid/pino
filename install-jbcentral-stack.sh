@@ -13,6 +13,7 @@
 # Usage:
 #   bash install-jbcentral-stack.sh
 #   bash install-jbcentral-stack.sh --pino-dir ~/tools/pino
+#   bash install-jbcentral-stack.sh --test        # dry run in /tmp, auto-restores ~/.claude/settings.json
 set -euo pipefail
 
 # ── colours ────────────────────────────────────────────────────────────────
@@ -33,13 +34,35 @@ HEADROOM_PKG="${HEADROOM_PKG:-headroom-ai[all] @ git+https://github.com/hybloid/
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 MODE_FILE="$HOME/.claude/proxy-mode"
 
+TEST_MODE=0
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pino-dir)  PINO_DIR="$2";  shift 2 ;;
     --venv-dir)  VENV_DIR="$2";  shift 2 ;;
+    --test)      TEST_MODE=1;    shift   ;;
     *) err "Unknown argument: $1" ;;
   esac
 done
+
+# ── test mode: temp dirs + settings.json backup/restore ────────────────────
+if [[ "$TEST_MODE" -eq 1 ]]; then
+  PINO_DIR="/tmp/pino-test"
+  VENV_DIR="/tmp/venv-headroom-test"
+  SETTINGS_BAK="${CLAUDE_SETTINGS}.test-bak"
+  cp "$CLAUDE_SETTINGS" "$SETTINGS_BAK" 2>/dev/null || true
+  trap '
+    echo ""
+    echo -e "\033[1;33m! test cleanup\033[0m"
+    rm -rf /tmp/pino-test /tmp/venv-headroom-test
+    if [[ -f "'"$SETTINGS_BAK"'" ]]; then
+      cp "'"$SETTINGS_BAK"'" "'"$CLAUDE_SETTINGS"'"
+      rm -f "'"$SETTINGS_BAK"'"
+      echo -e "\033[0;32m✓\033[0m settings.json restored"
+    fi
+  ' EXIT
+  echo -e "\n\033[1;33m  TEST MODE — install to /tmp, settings.json will be restored on exit\033[0m"
+fi
 
 echo ""
 echo "  pino + headroom + jbcentral stack installer"
