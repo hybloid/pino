@@ -82,15 +82,19 @@ export function createServer({ config, transformFn }) {
       }
 
       if (parsed && AUTO_CACHE) {
-        // Subagent conversations are short-lived with back-to-back turns: the
-        // 2.0x write premium of 1h TTL never pays back there (a 5m entry is
-        // refreshed on every read while the agent is actively working).
-        // Claude Code marks subagent requests with x-claude-code-agent-id —
-        // force the cheaper 5m TTL on every slot for those. Main sessions
-        // keep the 1h head and the configurable TAIL_TTL tail.
+        // Use 5m TTL (cheaper write) for two cases:
+        // 1. Subagents (x-claude-code-agent-id header): short-lived, back-to-back turns,
+        //    2x write premium of 1h never pays back while the agent is actively working.
+        // 2. Opus in plan mode (ExitPlanMode in tools): rapid plan-review iterations
+        //    make 1h writes expensive; 5m is refreshed every turn anyway.
+        // All other main sessions keep the 1h head + configurable TAIL_TTL tail.
         const isSubagent = Boolean(req.headers["x-claude-code-agent-id"]);
-        const headTtl = isSubagent ? "5m" : "1h";
-        const tailTtl = isSubagent ? "5m" : TAIL_TTL;
+        const isOpusInPlanMode =
+          /claude-opus/i.test(parsed.model || "") &&
+          Array.isArray(parsed.tools) &&
+          parsed.tools.some((t) => t?.name === "ExitPlanMode");
+        const headTtl = isSubagent || isOpusInPlanMode ? "5m" : "1h";
+        const tailTtl = isSubagent || isOpusInPlanMode ? "5m" : TAIL_TTL;
         const strippedMid = stripIntermediateMessageBreakpoints(parsed);
         const { tag, tailBlocks } = injectBreakpointIfAbsent(parsed, { tailTtl, headTtl });
         const clientTail = normalizeTailBreakpoints(parsed, tailTtl);
@@ -98,7 +102,7 @@ export function createServer({ config, transformFn }) {
         const counter = { rewritten: 0, alreadySet: 0, skipped: 0 };
         rewriteCacheControl(parsed, counter, skip, headTtl);
         notes.push(
-          `cache=rewrote:${counter.rewritten},already:${counter.alreadySet},skipped:${counter.skipped},inject:${tag},mid-stripped:${strippedMid},ttl:${headTtl}/${tailTtl}${isSubagent ? ",sub" : ""}`,
+          `cache=rewrote:${counter.rewritten},already:${counter.alreadySet},skipped:${counter.skipped},inject:${tag},mid-stripped:${strippedMid},ttl:${headTtl}/${tailTtl}${isSubagent ? ",sub" : ""}${isOpusInPlanMode ? ",opus-plan" : ""}`,
         );
       }
 
