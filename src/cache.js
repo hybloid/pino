@@ -131,7 +131,7 @@ export function injectBreakpointIfAbsent(body, opts = {}) {
 
   if (Array.isArray(body.tools) && body.tools.length > 0 && !hasBreakpoint(body.tools)) {
     const last = body.tools[body.tools.length - 1];
-    if (last && typeof last === "object") {
+    if (last && typeof last === "object" && !last.defer_loading) {
       last.cache_control = { type: "ephemeral", ttl: headTtl };
       tags.push("tools");
     }
